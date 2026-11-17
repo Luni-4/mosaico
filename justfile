@@ -8,7 +8,10 @@
 wheel := ""
 
 compose_file := "docker/testing/compose.yml"
-mosaicod_bin := justfile_directory() / "mosaicod/target/debug/mosaicod"
+# Cargo profile of the mosaicod build, e.g. `just profile=release dev`
+profile := "dev"
+target_dir := if profile == "dev" { "debug" } else { profile }
+mosaicod_bin := justfile_directory() / "mosaicod/target" / target_dir / "mosaicod"
 
 # The `docker compose` plugin, or the legacy `docker-compose` when it is missing
 compose := if `docker compose version >/dev/null 2>&1 && echo plugin || echo legacy` == "plugin" { "docker compose" } else { "docker-compose" }
@@ -43,11 +46,16 @@ test-full-stack *options: build-mosaicod
 
 # Run the full-stack tests in every variant
 test-full-stack-all: build-mosaicod
-    just wheel='{{ wheel }}' test-full-stack
-    just wheel='{{ wheel }}' test-full-stack --tls
-    just wheel='{{ wheel }}' test-full-stack --api-key
-    just wheel='{{ wheel }}' test-full-stack --gzip
+    just wheel='{{ wheel }}' profile='{{ profile }}' test-full-stack
+    just wheel='{{ wheel }}' profile='{{ profile }}' test-full-stack --tls
+    just wheel='{{ wheel }}' profile='{{ profile }}' test-full-stack --api-key
+    just wheel='{{ wheel }}' profile='{{ profile }}' test-full-stack --gzip
 
-# Build the mosaicod binary used by the full-stack tests
+# Run a disposable mosaicod on empty databases, removed on Ctrl-C. Options: `--tls`, `--api-key`
+dev *options: build-mosaicod
+    cd mosaico-sdk-py && uv run --locked --extra cli python -m testing.dev_env \
+        --mosaicod-bin {{ mosaicod_bin }} {{ options }}
+
+# Build the mosaicod binary used by the full-stack tests and `dev`
 build-mosaicod:
-    cd mosaicod && cargo build --bin mosaicod
+    cd mosaicod && cargo build --profile {{ profile }} --bin mosaicod

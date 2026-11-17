@@ -181,7 +181,7 @@ uv run --locked --extra cli pytest testing -k integration \
     --start-mosaicod --mosaicod-bin ../mosaicod/target/debug/mosaicod
 ```
 
-Add `--tls`, `--gzip` or `--api-key` to start `mosaicod` with that feature enabled. Each run recreates the databases empty, so it also removes the data of a running `./scripts/dev_env`.
+Add `--tls`, `--gzip` or `--api-key` to start `mosaicod` with that feature enabled. Each run recreates the databases empty, so it also removes the data of a running `just dev`.
 
 ### Testing a wheel
 
@@ -199,14 +199,19 @@ The same command runs the full-stack tests with the options above. The release w
 
 ## Development Environment
 
-The project provides a script that generates a disposable development environment. This environment launches a clean `mosaicod` instance without any data, allowing you to test and interact with the daemon without needing to set up your own data.
+The `just dev` recipe launches a disposable development environment: a clean `mosaicod` instance on empty databases, which we can test and interact with without setting up our own data.
 
 This is particularly useful when developing client applications or testing the API, as it provides a consistent and isolated environment for experimentation.
 
 The environment can be launched with:
 
 ```bash
-./scripts/dev_env
+just dev
 ```
 
-Use `--help` to see available options.
+`mosaicod` listens on `localhost:6276` and logs to the terminal. When we stop it with Ctrl-C, the recipe also removes the databases and the stored data.
+
+- `--api-key` enables API keys and prints one with read, write and delete permissions.
+- `--tls` enables TLS with the certificates of `mosaicod/tests/data`, and clients use `mosaicod/tests/data/ca.pem`.
+
+With either option, the recipe also configures the `dev` profile of the `mosaico` CLI for this server and makes it the default. To build `mosaicod` with another Cargo profile, we set `profile`, e.g. `just profile=release dev`.

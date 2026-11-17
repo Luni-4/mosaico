@@ -14,6 +14,6 @@
 /docs/py/                   @fdicorato
 /docs/main/docs/daemon/     @cabba
 /logo/                      @cabba @fdicorato
-/scripts/                   @cabba @fdicorato
+/justfile                   @cabba @fdicorato
 /proto/                     @cabba @fdicorato
 /.github/                   @cabba

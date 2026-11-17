@@ -148,15 +148,19 @@ class Mosaicod:
             )
         return result.stdout.strip()
 
-    def start(self, host: str, port: int) -> None:
-        """Starts the server and waits until it accepts connections."""
-        with open(self.log_file, "wb") as log:
-            self.process = subprocess.Popen(
-                [self.binary, "server", "--port", str(port)],
-                env=self.env,
-                stdout=log,
-                stderr=subprocess.STDOUT,
-            )
+    def start(self, host: str, port: int, log_to_terminal: bool = False) -> None:
+        """Starts the server and waits until it accepts connections.
+
+        The server logs to `log_file`, or to the terminal with `log_to_terminal`.
+        """
+        command = [self.binary, "server", "--port", str(port)]
+        if log_to_terminal:
+            self.process = subprocess.Popen(command, env=self.env)
+        else:
+            with open(self.log_file, "wb") as log:
+                self.process = subprocess.Popen(
+                    command, env=self.env, stdout=log, stderr=subprocess.STDOUT
+                )
 
         deadline = time.monotonic() + STARTUP_TIMEOUT
         while time.monotonic() < deadline:
@@ -190,9 +194,11 @@ class Mosaicod:
 
     def log_tail(self, lines: int = 20) -> str:
         """The last lines of the server log, to explain a failure."""
+        if not self.log_file.exists():
+            return "See the mosaicod output above."
         try:
             text = self.log_file.read_text(errors="replace")
         except OSError:
-            return f"No mosaicod log at {self.log_file}."
+            return f"Cannot read the mosaicod log at {self.log_file}."
         tail = "\n".join(text.splitlines()[-lines:])
         return f"Last lines of {self.log_file}:\n{tail}"
