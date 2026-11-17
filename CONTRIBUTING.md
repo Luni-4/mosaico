@@ -45,14 +45,14 @@ The backend (`mosaicod`), Python SDK (`mosaico-sdk-py`), and documentation (`doc
 
 ### Python SDK setup
 
-Install [uv](https://docs.astral.sh/uv/getting-started/installation/) 0.13.1 or newer, then run from the repository root:
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/) 0.13.1 or newer and [just](https://just.systems/man/en/), which runs the tests, then run from the repository root:
 
 ```bash
 cd mosaico-sdk-py
 uv sync --locked --extra cli
 uv run --locked --extra cli pre-commit install
 cd ..
-./scripts/tests --sdk-python
+just test-sdk
 ```
 
 The SDK supports Python 3.10 or newer. uv creates the local `.venv`, installs the SDK in editable mode, and includes development tools. Keep `--extra cli` on SDK runs so the optional CLI dependencies remain installed. Commit changes to `pyproject.toml` and `uv.lock` together. See the [development guide](docs/main/docs/dev/testing_and_dev.md) for dependency updates and documentation builds.

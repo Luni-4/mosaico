@@ -8,7 +8,6 @@ on:
       - "**.py"
       - "**/pyproject.toml"
       - "**/uv.lock"
-      - "scripts/tests"
       - ".github/workflows/py-ci.yml"
   pull_request:
     branches: ["main"]
@@ -16,7 +15,6 @@ on:
       - "**.py"
       - "**/pyproject.toml"
       - "**/uv.lock"
-      - "scripts/tests"
       - ".github/workflows/py-ci.yml"
   workflow_dispatch:
   workflow_call:
@@ -68,7 +66,8 @@ jobs:
           enable-cache: true
           cache-dependency-glob: mosaico-sdk-py/uv.lock
       - name: Unit Tests
-        run: ./scripts/tests --sdk-python
+        working-directory: mosaico-sdk-py
+        run: uv run --locked --extra cli pytest testing -k unit
 
       - name: Build and smoke-test the distribution
         run: |

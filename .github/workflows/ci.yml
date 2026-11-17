@@ -12,7 +12,7 @@ on:
       - "**/Cargo.lock"
       - "**/pyproject.toml"
       - "**/uv.lock"
-      - "scripts/tests"
+      - "docker/testing/**"
   pull_request:
     branches: ["main"]
     paths:
@@ -24,7 +24,7 @@ on:
       - "**/Cargo.lock"
       - "**/pyproject.toml"
       - "**/uv.lock"
-      - "scripts/tests"
+      - "docker/testing/**"
   workflow_dispatch:
   workflow_call:
 
@@ -33,11 +33,17 @@ permissions:
 
 jobs:
   full-stack-tests:
-    name: "Tests on (Py ${{ matrix.python-version }})"
+    name: "Tests on (Py ${{ matrix.python-version }}, ${{ matrix.variant.name }})"
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.10", "3.13"]
+        # pytest options that start mosaicod with each feature
+        variant:
+          - { name: "plain", options: "" }
+          - { name: "TLS", options: "--tls" }
+          - { name: "API key", options: "--api-key" }
+          - { name: "gzip", options: "--gzip" }
     runs-on: ubuntu-24.04
     env:
       PYTHON_KEYRING_BACKEND: keyring.backends.null.Keyring
@@ -59,6 +65,15 @@ jobs:
           enable-cache: true
           cache-dependency-glob: mosaico-sdk-py/uv.lock
 
+      - name: Build mosaicod
+        working-directory: mosaicod
+        run: cargo build --bin mosaicod
+
+      # The tests start the databases of docker/testing and mosaicod themselves.
       - name: Integration Tests
+        working-directory: mosaico-sdk-py
+        env:
+          OPTIONS: ${{ matrix.variant.options }}
         run: |
-          ./scripts/tests --full-stack-all
+          uv run --locked --extra cli pytest testing -k integration $OPTIONS \
+            --start-mosaicod --mosaicod-bin ../mosaicod/target/debug/mosaicod

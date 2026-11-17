@@ -1,10 +1,11 @@
+import contextlib
 import json
 import logging
 import os
 from functools import partial
 from pathlib import Path
 from time import time_ns
-from typing import Callable, Dict, Optional, Type
+from typing import Callable, Dict, Iterator, Optional, Type
 
 import pytest
 from google.protobuf.message import Message
@@ -16,6 +17,7 @@ import mosaicolabs
 from mosaicolabs.enum.grpc_compression import GRPCCompressionAlgorithm
 from mosaicolabs.logging_config import setup_sdk_logging
 
+from .mosaicod import Mosaicod, MosaicodError, start_databases, stop_databases
 from .unit.bridges.config import (
     ALL_CHANNEL_NAMES,
     GPS_CHANNEL_NAME,
@@ -48,7 +50,7 @@ def pytest_configure(config):
     Hook called by pytest before any tests are run.
     We use it to sync the SDK's internal logging with pytest's CLI options.
     """
-    # With `scripts/tests --wheel`, the SDK must come from the wheel, not from `src/`.
+    # When testing a wheel (MOSAICO_TEST_WHEEL), the SDK must come from it, not from `src/`.
     if os.environ.get("MOSAICO_TEST_WHEEL"):
         src_dir = Path(__file__).resolve().parent.parent / "src"
         sdk_file = Path(mosaicolabs.__file__).resolve()
@@ -126,6 +128,21 @@ def pytest_addoption(parser):
         type=str,
         help="Path to the mosaicod binary, to register hooks. Hook tests are skipped without it.",
     )
+    parser.addoption(
+        "--start-mosaicod",
+        action="store_true",
+        default=False,
+        help=(
+            "Start the databases of docker/testing and the '--mosaicod-bin' server for the "
+            "integration tests, configured with '--tls', '--gzip' and '--api-key'."
+        ),
+    )
+    parser.addoption(
+        "--api-key",
+        action="store_true",
+        default=False,
+        help="With '--start-mosaicod', enable API keys and create one for each permission.",
+    )
 
 
 @pytest.fixture(scope="session")
@@ -156,29 +173,79 @@ def with_auth(
     )
 
 
-@pytest.fixture(scope="session")
-def api_key_read(request):
-    return request.config.getoption("--api-key-read")
+def _api_key(request, mosaicod_server: Optional[Mosaicod], name: str):
+    """The API key given on the command line, or the one created for the started server."""
+    key = request.config.getoption(f"--api-key-{name}")
+    if key is None and mosaicod_server is not None:
+        key = mosaicod_server.api_keys.get(name)
+    return key
 
 
 @pytest.fixture(scope="session")
-def api_key_write(request):
-    return request.config.getoption("--api-key-write")
+def api_key_read(request, mosaicod_server):
+    return _api_key(request, mosaicod_server, "read")
 
 
 @pytest.fixture(scope="session")
-def api_key_delete(request):
-    return request.config.getoption("--api-key-delete")
+def api_key_write(request, mosaicod_server):
+    return _api_key(request, mosaicod_server, "write")
 
 
 @pytest.fixture(scope="session")
-def api_key_manage(request):
-    return request.config.getoption("--api-key-manage")
+def api_key_delete(request, mosaicod_server):
+    return _api_key(request, mosaicod_server, "delete")
+
+
+@pytest.fixture(scope="session")
+def api_key_manage(request, mosaicod_server):
+    return _api_key(request, mosaicod_server, "manage")
 
 
 @pytest.fixture(scope="session")
 def mosaicod_bin(request):
     return request.config.getoption("--mosaicod-bin")
+
+
+@pytest.fixture(scope="session")
+def mosaicod_server(
+    request, tmp_path_factory, mosaicod_bin, host, port, with_tls, with_gzip
+) -> Iterator[Optional[Mosaicod]]:
+    """The mosaicod server started with `--start-mosaicod`, None without it."""
+    if not request.config.getoption("--start-mosaicod"):
+        yield None
+        return
+
+    if mosaicod_bin is None:
+        pytest.exit("'--start-mosaicod' needs '--mosaicod-bin'.", returncode=1)
+
+    try:
+        start_databases()
+        server = Mosaicod.configure(
+            binary=mosaicod_bin,
+            data_dir=tmp_path_factory.mktemp("mosaicod"),
+            tls=with_tls,
+            gzip=with_gzip,
+            api_key=request.config.getoption("--api-key"),
+        )
+        server.start(host, port)
+    except MosaicodError as error:
+        with contextlib.suppress(MosaicodError):
+            stop_databases()
+        pytest.exit(str(error), returncode=1)
+
+    try:
+        yield server
+    finally:
+        server.stop()
+        stop_databases()
+
+
+@pytest.fixture(scope="session")
+def mosaicod_env(mosaicod_server) -> Dict[str, str]:
+    """The environment for mosaicod commands, the one of the started server if any."""
+    if mosaicod_server is not None:
+        return mosaicod_server.env
+    return dict(os.environ)
 
 
 @pytest.fixture(scope="session")

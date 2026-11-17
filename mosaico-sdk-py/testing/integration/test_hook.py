@@ -2,10 +2,9 @@
 Events sent by the running mosaicod to a `HookServer` registered as a hook.
 
 Registering a hook takes the `mosaicod` CLI, so these tests are skipped without
-`--mosaicod-bin`, which `scripts/tests` passes.
+`--mosaicod-bin`.
 """
 
-import os
 import queue
 import subprocess
 import threading
@@ -24,18 +23,21 @@ TOPICS = ["/hook/first", "/hook/second"]
 TIMEOUT = 15
 
 
-def mosaicod(mosaicod_bin: str, *args: str) -> str:
+def mosaicod(mosaicod_bin: str, env: dict[str, str], *args: str) -> str:
     """Runs a `mosaicod` command and returns its output."""
-    # Without the script's `RUST_LOG`, so the output is only the command's.
-    env = os.environ | {"RUST_LOG": ""}
+    # Without `RUST_LOG`, so the output is only the command's.
     result = subprocess.run(
-        [mosaicod_bin, *args], env=env, capture_output=True, text=True, check=True
+        [mosaicod_bin, *args],
+        env=env | {"RUST_LOG": ""},
+        capture_output=True,
+        text=True,
+        check=True,
     )
     return result.stdout.strip()
 
 
 @pytest.fixture
-def events(mosaicod_bin):
+def events(mosaicod_bin, mosaicod_env):
     """The events a `HookServer`, registered as a hook for the test only, receives."""
     if mosaicod_bin is None:
         pytest.skip("Tests run without '--mosaicod-bin'")
@@ -52,12 +54,12 @@ def events(mosaicod_bin):
 
     try:
         url = f"http://127.0.0.1:{server.server_address[1]}/"
-        hook_id = mosaicod(mosaicod_bin, "hook", "create", url)
+        hook_id = mosaicod(mosaicod_bin, mosaicod_env, "hook", "create", url)
         try:
             yield received
         finally:
             # Left registered, the hook would get the events of every later test.
-            mosaicod(mosaicod_bin, "hook", "rm", hook_id)
+            mosaicod(mosaicod_bin, mosaicod_env, "hook", "rm", hook_id)
     finally:
         server.shutdown()
         server.close()

@@ -70,20 +70,33 @@ jobs:
           name: python-sdk-dist
           path: dist
 
-      # Path of the wheel, for the following steps.
+      # Absolute path of the wheel, for the following steps.
       - name: Find wheel
         id: wheel
-        run: echo "path=$(ls dist/mosaicolabs-*.whl)" >> "$GITHUB_OUTPUT"
+        run: echo "path=$(ls "$PWD"/dist/mosaicolabs-*.whl)" >> "$GITHUB_OUTPUT"
 
-      - name: Unit tests
+      - name: Build mosaicod
+        working-directory: mosaicod
+        run: cargo build --bin mosaicod
+
+      # The tests import the SDK from the wheel, installed in an isolated environment.
+      # MOSAICO_TEST_WHEEL makes conftest.py check that it does not come from `src/`.
+      # The full-stack tests start the databases of docker/testing and mosaicod themselves.
+      - name: Tests
+        working-directory: mosaico-sdk-py
         env:
           WHEEL: ${{ steps.wheel.outputs.path }}
-        run: ./scripts/tests --sdk-python --wheel "$WHEEL"
-
-      - name: Full-stack tests
-        env:
-          WHEEL: ${{ steps.wheel.outputs.path }}
-        run: ./scripts/tests --full-stack-all --wheel "$WHEEL"
+          MOSAICO_TEST_WHEEL: "1"
+        run: |
+          pytest() {
+            uv run --isolated --no-project --with "$WHEEL[cli]" --with pytest pytest testing "$@"
+          }
+          server=(--start-mosaicod --mosaicod-bin ../mosaicod/target/debug/mosaicod)
+          pytest -k unit
+          pytest -k integration "${server[@]}"
+          pytest -k integration "${server[@]}" --tls
+          pytest -k integration "${server[@]}" --api-key
+          pytest -k integration "${server[@]}" --gzip
 
       # The SDK must be importable without the optional `cli` dependencies.
       - name: Import without extras

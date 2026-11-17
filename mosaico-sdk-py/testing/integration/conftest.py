@@ -29,6 +29,12 @@ from .config import (
 )
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _mosaicod(mosaicod_server):
+    """Starts mosaicod before the first integration test, with `--start-mosaicod`."""
+    return mosaicod_server
+
+
 @pytest.fixture(scope="function")
 def mosaico_client(host, port, tls_cert_path, compression, api_key_manage):
     """Open a client connection FOR EACH function using this fixture"""

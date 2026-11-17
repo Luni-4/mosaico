@@ -12,9 +12,10 @@ def test_tls_connection_from_path(host, port, tls_cert_path, with_tls):
         assert client.sequence_handler(UPLOADED_SEQUENCE_NAME) is not None
 
 
-def test_tls_connection_from_env(host, port, with_tls):
+def test_tls_connection_from_env(host, port, tls_cert_path, with_tls, monkeypatch):
     if not with_tls:
         pytest.skip("Tests run without '--tls'")
+    monkeypatch.setenv("MOSAICO_TLS_CERT_FILE", tls_cert_path)
     with MosaicoClient.from_env(host, port) as client:
         assert client.sequence_handler(UPLOADED_SEQUENCE_NAME) is not None
 

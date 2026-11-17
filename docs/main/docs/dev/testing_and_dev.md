@@ -131,22 +131,71 @@ uv run --locked mkdocs build
 
 The project includes a comprehensive suite of unit and integration tests to validate functionality and prevent regressions.
 
-The test suite can be executed with:
+The `justfile` at the repository root runs the test suites with [just](https://just.systems/man/en/), which we install with `brew install just` or `cargo install just`. Running `just` alone lists the recipes:
 
 ```bash
-./scripts/tests
+just test                        # All the tests
+just test-mosaicod               # mosaicod tests
+just test-sdk                    # Python SDK unit tests
+just test-full-stack             # Full-stack tests, add --tls, --api-key or --gzip for a variant
+just test-full-stack-all         # Full-stack tests in every variant
 ```
 
-Use `--help` to see available options.
-
-By default, the Python SDK tests run against the sources. To test a built wheel instead, pass its path with `--wheel`, so the tests import the SDK as users install it:
+The recipes forward extra options to `cargo test` or pytest, e.g. `just test-sdk -x`. To test a built wheel instead of the sources, we set `wheel`:
 
 ```bash
 uv build mosaico-sdk-py
-./scripts/tests --sdk-python --wheel mosaico-sdk-py/dist/mosaicolabs-*.whl
+just wheel=mosaico-sdk-py/dist/mosaicolabs-0.8.0-py3-none-any.whl test-sdk
 ```
 
-The release workflow runs the unit and full-stack tests this way on the wheel of every release.
+The recipes only run the commands below, so we can also run them by hand, from the repository root.
+
+### mosaicod
+
+The `mosaicod` tests need the PostgreSQL database of `docker/testing`. We start it, run the tests, and then remove it with its data:
+
+```bash
+docker compose -f docker/testing/compose.yml up -d --wait
+DATABASE_URL=postgresql://postgres:password@localhost:6543/mosaico SQLX_OFFLINE=true \
+    cargo test --manifest-path mosaicod/Cargo.toml
+docker compose -f docker/testing/compose.yml down -v
+```
+
+### Python SDK unit tests
+
+The unit tests do not need a server:
+
+```bash
+cd mosaico-sdk-py
+uv run --locked --extra cli pytest testing -k unit
+```
+
+### Full-stack tests
+
+The full-stack tests run the Python SDK against a real `mosaicod`. With `--start-mosaicod`, pytest starts the databases of `docker/testing` and the `mosaicod` binary, and stops both at the end. Therefore they only need Docker and a `mosaicod` build:
+
+```bash
+cargo build --manifest-path mosaicod/Cargo.toml --bin mosaicod
+cd mosaico-sdk-py
+uv run --locked --extra cli pytest testing -k integration \
+    --start-mosaicod --mosaicod-bin ../mosaicod/target/debug/mosaicod
+```
+
+Add `--tls`, `--gzip` or `--api-key` to start `mosaicod` with that feature enabled. Each run recreates the databases empty, so it also removes the data of a running `./scripts/dev_env`.
+
+### Testing a wheel
+
+By default, the Python SDK tests run against the sources. To test a built wheel instead, we install it in an isolated environment, so the tests import the SDK as users install it. `MOSAICO_TEST_WHEEL` makes the tests fail if the SDK is imported from the sources:
+
+```bash
+uv build mosaico-sdk-py
+cd mosaico-sdk-py
+MOSAICO_TEST_WHEEL=1 uv run --isolated --no-project \
+    --with "$(ls "$PWD"/dist/mosaicolabs-*.whl)[cli]" --with pytest \
+    pytest testing -k unit
+```
+
+The same command runs the full-stack tests with the options above. The release workflow tests the wheel of every release this way.
 
 ## Development Environment
 

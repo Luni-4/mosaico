@@ -8,6 +8,7 @@ on:
       - "**.rs"
       - "**/Cargo.toml"
       - "**/Cargo.lock"
+      - "docker/testing/**"
   pull_request:
     branches: ["main"]
     paths:
@@ -15,6 +16,7 @@ on:
       - "**.rs"
       - "**/Cargo.toml"
       - "**/Cargo.lock"
+      - "docker/testing/**"
   workflow_dispatch:
   workflow_call:
 
@@ -63,6 +65,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libpq-dev
 
+      - name: Start the testing databases
+        run: docker compose -f docker/testing/compose.yml up -d --wait
+
       - name: Unit Tests
-        run: ./scripts/tests --mosaicod
+        working-directory: mosaicod
+        env:
+          DATABASE_URL: postgresql://postgres:password@localhost:6543/mosaico
+          SQLX_OFFLINE: "true"
+        run: cargo test
 
